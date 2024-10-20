@@ -6,7 +6,9 @@ namespace gazebo
 {
     DiffDriveGazeboPlugin::DiffDriveGazeboPlugin() : ModelPlugin(),
         left_wheel_velocity_(0.0), right_wheel_velocity_(0.0),
-        x_pos_(0.0), y_pos_(0.0), theta_(0.0), prev_time_(0.0) {}
+        x_pos_(0.0), y_pos_(0.0), theta_(0.0), prev_time_(0.0),
+        clock(RCL_ROS_TIME)  {}
+        
 
     DiffDriveGazeboPlugin::~DiffDriveGazeboPlugin() {}
 
@@ -14,6 +16,7 @@ namespace gazebo
     {
         // Initialize ROS node
         ros_node_ = gazebo_ros::Node::Get(_sdf);
+
 
         // Load parameters from URDF/SDF
         if (_sdf->HasElement("wheel_radius"))
@@ -36,6 +39,7 @@ namespace gazebo
 
         // Publisher for odometry
         odom_pub_ = ros_node_->create_publisher<nav_msgs::msg::Odometry>("/odom", 10);
+        joint_state_pub_ = ros_node_->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
 
         // TF broadcaster
         tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(ros_node_);
@@ -43,6 +47,9 @@ namespace gazebo
         // Connect the update event to Gazebo's update cycle
         update_connection_ = event::Events::ConnectWorldUpdateBegin(
             std::bind(&DiffDriveGazeboPlugin::OnUpdate, this));
+
+        prev_time_ = ros_node_->get_clock()->now().seconds();
+
     }
 
     void DiffDriveGazeboPlugin::cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
@@ -62,7 +69,8 @@ namespace gazebo
         right_wheel_joint_->SetVelocity(0, right_wheel_velocity_);
 
         // Update robot's odometry
-        double current_time = ros_node_->now().seconds();
+        now_ = ros_node_->get_clock()->now();
+        double current_time = now_.seconds();
         double delta_time = current_time - prev_time_;
         prev_time_ = current_time;
 
@@ -76,7 +84,7 @@ namespace gazebo
 
         // Publish odometry
         nav_msgs::msg::Odometry odom_msg;
-        odom_msg.header.stamp = ros_node_->now();
+        odom_msg.header.stamp = now_;
         odom_msg.header.frame_id = "odom";
         odom_msg.pose.pose.position.x = x_pos_;
         odom_msg.pose.pose.position.y = y_pos_;
@@ -87,6 +95,38 @@ namespace gazebo
         odom_msg.pose.pose.orientation.z = q.z();
         odom_msg.pose.pose.orientation.w = q.w();
         odom_pub_->publish(odom_msg);
+
+        // TF Transform
+        geometry_msgs::msg::TransformStamped transform;
+        transform.header.stamp = now_;
+        transform.header.frame_id = "odom";
+        transform.child_frame_id = "base_link";
+        transform.transform.translation.x = x_pos_;
+        transform.transform.translation.y = y_pos_;
+        transform.transform.translation.z = 0.0;
+        transform.transform.rotation.x = q.x();
+        transform.transform.rotation.y = q.y();
+        transform.transform.rotation.z = q.z();
+        transform.transform.rotation.w = q.w();
+
+        // Publish TF
+        tf_broadcaster_->sendTransform(transform);
+
+        // Joint State message
+        sensor_msgs::msg::JointState joint_state_msg;
+        joint_state_msg.header.stamp = now_;
+        joint_state_msg.name = {"left_wheel_joint", "right_wheel_joint"};
+
+        // Calculate wheel positions
+        left_wheel_position_ += left_wheel_velocity_ * delta_time;
+        right_wheel_position_ += right_wheel_velocity_ * delta_time;
+
+        // Add position and velocity information
+        joint_state_msg.position = {left_wheel_position_, right_wheel_position_};
+        joint_state_msg.velocity = {left_wheel_velocity_, right_wheel_velocity_};
+
+        // Publish joint state
+        joint_state_pub_->publish(joint_state_msg);
     }
 }
 

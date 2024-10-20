@@ -1,7 +1,12 @@
 #ifndef DIFF_DRIVE_GAZEBO_PLUGIN_HPP_
 #define DIFF_DRIVE_GAZEBO_PLUGIN_HPP_
 
+
+#include <memory>
+#include <gazebo/common/Time.hh>
 #include <gazebo/common/Plugin.hh>
+#include <rclcpp/time.hpp>
+#include <rclcpp/clock.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -24,6 +29,10 @@ namespace gazebo
     private:
         void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
 
+        rclcpp::Clock clock;
+        rclcpp::Time now_;
+
+
         // Robot parameters
         double wheel_radius_;
         double wheel_separation_;
@@ -37,11 +46,14 @@ namespace gazebo
         rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
         rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
         std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+        rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;
 
         // Gazebo update connection
         event::ConnectionPtr update_connection_;
 
         // State variables
+        double left_wheel_position_;
+        double right_wheel_position_;
         double left_wheel_velocity_;
         double right_wheel_velocity_;
         double x_pos_, y_pos_, theta_;

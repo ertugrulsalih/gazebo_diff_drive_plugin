@@ -30,6 +30,7 @@ ament_target_dependencies(${PROJECT_NAME}
   sensor_msgs
   tf2_ros
   gazebo_ros
+  gazebo
 )
 
 # Gazebo bağımlılıkları
